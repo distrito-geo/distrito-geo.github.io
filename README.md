@@ -1,0 +1,5 @@
+# Distrito Geo
+
+Mapas interactivos de los Reels de Distrito Geo.
+
+- [Cafeterías CDMX](https://distrito-geo.github.io/cafeterias/)
