@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>¿Dónde abrirías un gimnasio en la CDMX? · versión 2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;800&display=swap">
+<style>
+/* Versión 2 del mapa de gimnasios: dos formatos (económico en verde lima, premium en violeta), con hábito, poder
+   adquisitivo, seguridad y alternativas gratis. Mismo lenguaje nocturno que la versión 1 y el mapa de cafeterías. */
+:root{color-scheme:dark;--bg:#05070f;--panel:rgba(10,14,28,.86);--ink:#eef2fa;--soft:#9aa6c2;--line:rgba(160,180,230,.18);
+  --lima:#96ff3c;--violeta:#af78ff;--rojo:#ff6e64;--cian:#5ad7ff}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Montserrat,system-ui,sans-serif;overflow-x:clip}
+h1,h2,h3{font-weight:800;line-height:1.08;text-wrap:balance;margin:0}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--lima);outline-offset:2px}
+.mapa{position:relative;height:100svh;min-height:560px;overflow:hidden}
+#deck{position:absolute;inset:0}
+.mapa::before{content:"";position:absolute;inset:0 0 auto 0;height:min(440px,62%);background:linear-gradient(rgba(5,7,15,.92),rgba(5,7,15,.55) 60%,transparent);pointer-events:none;z-index:1}
+.cabeza,.ficha,.leyenda{z-index:2}
+.cabeza{position:absolute;left:max(3vw,14px);top:max(3vh,14px);right:max(3vw,14px);pointer-events:none;display:flex;flex-direction:column;gap:12px;max-width:580px}
+.cabeza>*{pointer-events:auto}
+.cabeza h1{font-size:clamp(26px,4.2vw,44px)}
+.cabeza p{margin:0;color:var(--soft);font-size:15px;max-width:48ch}
+.modos{display:flex;flex-wrap:wrap;gap:6px}
+.modos button{min-height:44px;padding:0 16px;border-radius:22px;border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(8px);cursor:pointer;font-weight:700;font-size:14px}
+.modos button[aria-pressed=true][data-m=eco]{background:var(--lima);color:#0c1a00;border-color:var(--lima)}
+.modos button[aria-pressed=true][data-m=pre]{background:var(--violeta);color:#160830;border-color:var(--violeta)}
+.modos button[aria-pressed=true][data-m=gyms]{background:#eef2fa;color:#05070f}
+.busca input{width:100%;min-height:44px;font-size:16px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(8px)}
+.top{display:flex;gap:6px;flex-wrap:wrap}
+.top button{min-height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:rgba(12,16,30,.75);cursor:pointer;font-size:13px;font-weight:600}
+.top button[data-f=eco] b{color:var(--lima)}.top button[data-f=pre] b{color:var(--violeta)}
+.ficha{position:absolute;right:max(3vw,14px);bottom:max(4vh,14px);width:min(380px,calc(100% - 28px));max-height:70svh;overflow:auto;background:var(--panel);backdrop-filter:blur(12px);
+  border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.ficha h3{font-size:22px}
+.ficha .alc{color:var(--soft);font-size:14px;margin:2px 0 12px}
+.cifras{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;font-size:14px;margin:0}
+.cifras dd{margin:0;text-align:right;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.cifras dt{color:var(--soft)}
+.formato{margin-top:12px;padding:10px 12px;border-radius:10px;font-size:14px}
+.formato b{display:block;font-size:15px;margin-bottom:2px}
+.f-eco{background:rgba(150,255,60,.12)}.f-eco b{color:var(--lima)}
+.f-pre{background:rgba(175,120,255,.14)}.f-pre b{color:#c8a8ff}
+.ficha .vacia{color:var(--soft);font-size:14px;margin:0}
+.leyenda{position:absolute;left:max(3vw,14px);bottom:max(4vh,14px);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:13px;color:var(--soft);max-width:280px}
+.leyenda i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.band{padding:clamp(28px,4vw,64px) max(5vw,16px);max-width:1240px;margin:0 auto}
+.band h2{font-size:clamp(26px,3.4vw,36px);margin-bottom:18px}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:28px}
+.cols h3{font-size:17px;margin-bottom:6px}
+.cols p,.cols li{color:var(--soft);font-size:15px;margin:0 0 8px}
+.cols ul{padding-left:18px;margin:0}
+.cta{margin-top:36px;padding:24px;border-radius:16px;background:linear-gradient(120deg,rgba(150,255,60,.14),rgba(175,120,255,.14));border:1px solid var(--line);display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+.cta h3{font-size:22px;flex:1 1 300px}
+.cta p{margin:0;color:var(--soft);flex:1 1 300px}
+footer{display:flex;align-items:center;gap:16px;flex-wrap:wrap;color:var(--soft);font-size:13px;padding-top:28px}
+footer img{height:30px}
+@media(max-width:700px){
+  .cabeza p{display:none}
+  .ficha{left:14px;right:14px;width:auto;bottom:14px;padding:14px 16px;max-height:46svh}
+  .leyenda{display:none}
+  .top button{font-size:12px;padding:0 10px}
+  .modos button{padding:0 12px;font-size:13px}
+  .cabeza{gap:8px}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<section class="mapa" aria-label="Mapa 3D de oportunidad para gimnasios en la Ciudad de México">
+  <div id="deck"></div>
+  <div class="cabeza">
+    <h1>¿Dónde abrirías un gimnasio en la CDMX?</h1>
+    <p>Versión 2: cuenta solo a quien sí hace ejercicio, separa gimnasio económico y estudio premium, y descuenta inseguridad y alternativas gratis.</p>
+    <div class="modos" role="group" aria-label="Formato">
+      <button data-m="eco" aria-pressed="true">Económico</button>
+      <button data-m="pre" aria-pressed="false">Premium</button>
+      <button data-m="gyms" aria-pressed="false">Gimnasios</button>
+    </div>
+    <div class="busca">
+      <input id="q" list="colonias" placeholder="Busca tu colonia…" aria-label="Buscar colonia" autocomplete="off">
+      <datalist id="colonias"></datalist>
+    </div>
+    <div class="top" aria-label="Zonas que salen arriba">
+      <button data-h="1429" data-f="eco"><b>Eco</b> El Rosario</button>
+      <button data-h="1243" data-f="eco"><b>Eco</b> Olivar de los Padres</button>
+      <button data-h="3944" data-f="eco"><b>Eco</b> Chinampac de Juárez</button>
+      <button data-h="2657" data-f="pre"><b>Premium</b> Paseos de Taxqueña</button>
+      <button data-h="1324" data-f="pre"><b>Premium</b> Las Águilas</button>
+    </div>
+  </div>
+  <div class="leyenda" id="leyenda"></div>
+  <aside class="ficha" id="ficha" aria-live="polite"><p class="vacia">Toca un hexágono para ver cuánta gente que entrena vive cerca, cuántos gimnasios hay y cómo sale en cada formato.</p></aside>
+</section>
+
+<section class="band">
+  <h2>Cómo se hizo esta versión</h2>
+  <div class="cols">
+    <div>
+      <h3>Quién sí entrena</h3>
+      <p>Adultos de 15 a 59 años del Censo 2020. No todos hacen ejercicio: según el MOPRADEF de INEGI, en 2025 lo hizo el 44.5 % de los adultos de 32 ciudades (mujeres 40.7 %, hombres 49.1 %), y en 2020 iba de 25.7 % sin básica completa a 51.5 % con universidad. A cada manzana se le estima un porcentaje según su escolaridad y su proporción de mujeres.</p>
+    </div>
+    <div>
+      <h3>Dos formatos</h3>
+      <p><b style="color:var(--lima)">Económico:</b> toda la gente que entrena a 1 km. <b style="color:#c8a8ff">Premium:</b> solo la que vive en las zonas de mayor poder adquisitivo (el 40 % más alto en un índice del Censo con escolaridad y viviendas con auto, internet y computadora), a 1.5 km. Se compara contra los gimnasios cercanos, contando a los grandes como varios según su personal (DENUE 05/2026, incluidos los del Edomex).</p>
+    </div>
+    <div>
+      <h3>Seguridad y alternativas</h3>
+      <p>Se descuentan puntos a las zonas con más delitos de alto impacto denunciados en 2024 por cada mil personas que viven o trabajan cerca (FGJ CDMX) y a las que tienen deportivos públicos, parques y aparatos al aire libre (DENUE y OpenStreetMap). Se probaron 20 combinaciones de pesos; las zonas destacadas salen arriba en casi todas.</p>
+    </div>
+    <div>
+      <h3>Lo que aún no entra</h3>
+      <ul>
+        <li>Es un modelo, no la última palabra: puede ser tan completo como lo permitan los datos.</li>
+        <li>Rentas, ingreso real, precios, flujo peatonal y comercio informal.</li>
+        <li>El hábito de ejercicio es una estimación, no una medición por colonia.</li>
+        <li>Muchos delitos no se denuncian.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="cta">
+    <h3>¿Tienes un negocio? Te hago este análisis.</h3>
+    <p>Gimnasio, cafetería, farmacia, lo que sea: dónde está tu demanda, tu competencia y dónde conviene abrir. Escríbeme por mensaje directo a Distrito Geo.</p>
+  </div>
+  <footer>
+    <img src="logo.png" alt="Distrito Geo">
+    <span>Hexágonos de 350 m de lado. Fuentes: INEGI (DENUE 05/2026, Censo de Población 2020, MOPRADEF 2020 y 2025), FGJ CDMX (carpetas de investigación 2024), © colaboradores de OpenStreetMap.</span>
+  </footer>
+</section>
+
+<script src="https://unpkg.com/deck.gl@9.1.14/dist.min.js"></script>
+<script>
+{
+const MODOS = {
+  eco:  {col: [150,255,60], v: h => h.x, ley: '<i style="background:#96ff3c"></i>Altura = oportunidad para un gimnasio económico<br><i style="background:#2a3346"></i>Promedio o menos'},
+  pre:  {col: [175,120,255], v: h => h.y, ley: '<i style="background:#af78ff"></i>Altura = oportunidad para un estudio premium<br><i style="background:#2a3346"></i>Promedio o menos / zona sin poder adquisitivo alto'},
+  gyms: {col: [238,242,250], v: h => h.n / 3, ley: '<i style="background:#eef2fa"></i>Altura = gimnasios y estudios en el hexágono'}
+};
+const TOP = {1429: ['eco', 'Top económico'], 1243: ['eco', 'Top económico'], 3944: ['eco', 'Top económico'],
+             2657: ['pre', 'Top premium'], 1324: ['pre', 'Top premium']};
+let PE = 1009, PP = 838;
+const fmt = n => Math.round(n).toLocaleString('es-MX');
+const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const movil = innerWidth < 700;
+let modo = 'eco', sel = null, hexs = [], gyms = [], alc = [], esc = null;
+let vista = {longitude: movil ? -99.135 : -99.19, latitude: movil ? 19.38 : 19.425, zoom: movil ? 9.5 : 10.55, pitch: 50, bearing: -12, maxPitch: 70};
+
+function alto(h) {
+  if (modo === 'gyms') return h.n * 130;
+  const v = MODOS[modo].v(h);
+  return v > 1 ? Math.min(v - 1, 8) * 260 : 0;
+}
+function color(h) {
+  const m = MODOS[modo], v = m.v(h);
+  if (modo === 'gyms') { const k = Math.min(v, 1); return [...m.col.map(c => 20 + (c - 20) * (.3 + .7*k)), 90 + 165*k]; }
+  if (!(v > 1)) return [42,51,70, 90];
+  const k = Math.min((v - 1) / 5, 1);
+  return [...m.col.map(c => 30 + (c - 30) * (.45 + .55*k)), 130 + 125*k];
+}
+
+function capas() {
+  const M = deck;
+  return [
+    esc && new M.BitmapLayer({id: 'luces', image: 'luces.png', bounds: esc.luces, opacity: 1}),
+    new M.PathLayer({id: 'alc', data: alc, getPath: d => d, getColor: [140,165,230,70], getWidth: 1.2, widthUnits: 'pixels'}),
+    new M.SolidPolygonLayer({
+      id: 'hex', data: hexs, extruded: true, pickable: true, autoHighlight: true, highlightColor: [255,255,255,70],
+      getPolygon: h => h.v, getElevation: alto, getFillColor: h => h.id === sel ? [255,255,255,235] : color(h),
+      material: {ambient: .55, diffuse: .6, shininess: 24},
+      updateTriggers: {getElevation: modo, getFillColor: [modo, sel]},
+      transitions: quieto ? {} : {getElevation: {duration: 700}, getFillColor: {duration: 500}},
+      onClick: ({object}) => object && elegir(object, false)
+    }),
+    new M.ScatterplotLayer({
+      id: 'gyms', data: gyms, visible: modo === 'gyms' || vista.zoom > 12.5, pickable: true,
+      getPosition: d => [d[0], d[1], 30], getRadius: 28, radiusMinPixels: 1.4, radiusMaxPixels: 6,
+      getFillColor: d => d[3] ? [200,255,160,170] : [150,255,60,235], updateTriggers: {visible: modo}
+    })
+  ];
+}
+
+const mapa = new deck.Deck({
+  parent: document.getElementById('deck'), initialViewState: vista, controller: {touchRotate: true},
+  layers: [], parameters: {clearColor: [5/255, 7/255, 15/255, 1]},
+  onViewStateChange: ({viewState}) => { const z = vista.zoom; vista = viewState; if ((z > 12.5) !== (viewState.zoom > 12.5)) pintar(); },
+  getTooltip: ({object, layer}) => object && (layer.id === 'gyms'
+    ? {text: object[2] + (object[3] ? ' · Edomex' : ''), style: {background: '#0a0e1c', color: '#eef2fa', font: '13px Montserrat', borderRadius: '8px'}}
+    : {text: object.col + ' · ' + object.alc, style: {background: '#0a0e1c', color: '#eef2fa', font: '13px Montserrat', borderRadius: '8px'}})
+});
+function pintar() { mapa.setProps({layers: capas()}); }
+
+const vez = v => (v < 10 ? v.toFixed(1).replace('.0', '') : Math.round(v)) + ' veces el promedio';
+const nivel = r => r == null ? 's/d' : r < .34 ? 'bajo' : r < .67 ? 'medio' : 'alto';
+function elegir(h, volar) {
+  sel = h.id; pintar();
+  const t = TOP[h.id] ? `<b style="color:${TOP[h.id][0] === 'eco' ? 'var(--lima)' : '#c8a8ff'}">${TOP[h.id][1]}</b><br>` : '';
+  const eco = h.ac < 2500 ? 'Casi nadie vive cerca: zona de oficinas o poco habitada.'
+            : h.x > 1.2 ? `${vez(h.x)} de gente que entrena por gimnasio, ya con descuentos.`
+            : h.x > .8 ? 'Cerca del promedio de la ciudad.' : 'Por debajo del promedio: bien servida o con descuentos fuertes.';
+  const pre = !h.na ? 'No es zona de poder adquisitivo alto.'
+            : h.y > 1.2 ? `${vez(h.y)} entre las zonas de poder adquisitivo alto.`
+            : h.y > .8 ? 'Cerca del promedio de las zonas de poder adquisitivo alto.' : 'Por debajo del promedio de esas zonas.';
+  document.getElementById('ficha').innerHTML = `
+    <h3>${h.col || 'Sin colonia'}</h3>
+    <div class="alc">${t}${h.alc}</div>
+    <dl class="cifras">
+      <dt>Adultos de 15 a 59 a 1 km</dt><dd>${fmt(h.a)}</dd>
+      <dt>Que hacen ejercicio (estimado)</dt><dd>${fmt(h.ac)}</dd>
+      <dt>Gimnasios a 1 km (CDMX + Edomex)</dt><dd>${fmt(h.k)}</dd>
+      <dt>Poder adquisitivo (quintil)</dt><dd>${h.q} de 5</dd>
+      <dt>Delitos de alto impacto 2024</dt><dd>${h.dm == null ? 's/d' : nivel(h.rs)}</dd>
+      <dt>Alternativas gratis cerca</dt><dd>${nivel(h.ra)}</dd>
+    </dl>
+    <div class="formato f-eco"><b>Gimnasio económico</b>${eco}</div>
+    <div class="formato f-pre"><b>Estudio premium</b>${pre}</div>`;
+  if (volar) {
+    vista = {...vista, longitude: h.c[0] + (movil ? 0 : .012), latitude: h.c[1] + (movil ? .006 : .004), zoom: 12.7, pitch: 50,
+             transitionDuration: quieto ? 0 : 1600, transitionInterpolator: new deck.FlyToInterpolator()};
+    mapa.setProps({initialViewState: vista});
+  }
+}
+
+function ponerModo(m) {
+  modo = m;
+  document.querySelectorAll('.modos button').forEach(b => b.setAttribute('aria-pressed', b.dataset.m === m));
+  document.getElementById('leyenda').innerHTML = MODOS[m].ley;
+  pintar();
+}
+document.querySelectorAll('.modos button').forEach(b => b.addEventListener('click', () => ponerModo(b.dataset.m)));
+document.querySelectorAll('.top button').forEach(b => b.addEventListener('click', () => {
+  const h = hexs.find(x => x.id === +b.dataset.h); if (h) { ponerModo(b.dataset.f); elegir(h, true); }
+}));
+const q = document.getElementById('q');
+q.addEventListener('change', () => {
+  const t = q.value.split(' · ')[0].trim().toLowerCase(); if (!t) return;
+  const c = hexs.filter(h => h.col.toLowerCase() === t);
+  const lista = c.length ? c : hexs.filter(h => h.col.toLowerCase().includes(t));
+  if (!lista.length) { document.getElementById('ficha').innerHTML = '<p class="vacia">No encontré esa colonia. Prueba con otro nombre.</p>'; return; }
+  elegir(lista.reduce((a, b) => (b.a > a.a ? b : a)), true); q.blur();
+});
+
+ponerModo('eco');
+Promise.all(['hex.json', 'gyms.json', 'alcaldias.json', 'escena.json'].map(f => fetch(f).then(r => r.json())))
+  .then(([h, c, a, e]) => {
+    hexs = h; gyms = c; alc = a; esc = e; PE = e.prom_eco || PE; PP = e.prom_pre || PP; pintar();
+    const vistos = new Set();
+    document.getElementById('colonias').innerHTML = hexs.filter(x => x.col && !vistos.has(x.col + x.alc) && vistos.add(x.col + x.alc))
+      .sort((x, y) => x.col.localeCompare(y.col, 'es')).map(x => `<option value="${x.col} · ${x.alc}">`).join('');
+  })
+  .catch(() => { document.getElementById('ficha').innerHTML = '<p class="vacia">No se pudieron cargar los datos del mapa.</p>'; });
+}
+</script>
+</body>
+</html>
