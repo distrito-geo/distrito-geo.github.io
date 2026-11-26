@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Simulador de lavanderías · CDMX · Distrito Geo</title>
+<meta name="description" content="Toca cualquier punto de la Ciudad de México y estima cuánto podría vender una lavandería ahí, con tiempos a pie reales y el modelo de Huff.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;800&display=swap">
+<style>
+/* Simulador de lavanderías (versión 3 de la serie de geomarketing): nocturno de la serie, acento azul agua.
+   El mapa es la herramienta: tocar = simular una lavandería nueva; la ficha explica el resultado en lenguaje llano. */
+:root{color-scheme:dark;--bg:#05070f;--panel:rgba(10,14,28,.88);--ink:#eef2fa;--soft:#9aa6c2;--line:rgba(160,180,230,.18);
+  --agua:#3ce6dc;--ambar:#ffb347;--rosa:#ff5a8c}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Montserrat,system-ui,sans-serif;overflow-x:clip}
+h1,h2,h3{font-weight:800;line-height:1.08;text-wrap:balance;margin:0}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--agua);outline-offset:2px}
+.mapa{position:relative;height:100svh;min-height:560px;overflow:hidden}
+#deck{position:absolute;inset:0}
+.mapa::before{content:"";position:absolute;inset:0 0 auto 0;height:min(420px,58%);background:linear-gradient(rgba(5,7,15,.94),rgba(5,7,15,.5) 60%,transparent);pointer-events:none;z-index:1}
+.cabeza,.ficha,.leyenda{z-index:2}
+.cabeza{position:absolute;left:max(3vw,14px);top:max(3vh,14px);right:max(3vw,14px);pointer-events:none;display:flex;flex-direction:column;gap:10px;max-width:560px}
+.cabeza>*{pointer-events:auto}
+.etq{font-size:12px;font-weight:700;letter-spacing:.14em;color:var(--agua);text-transform:uppercase}
+.cabeza h1{font-size:clamp(26px,4.2vw,44px)}
+.cabeza p{margin:0;color:var(--soft);font-size:15px;max-width:48ch}
+.fila{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pill{min-height:42px;padding:0 15px;border-radius:21px;border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(8px);cursor:pointer;font-weight:700;font-size:14px}
+.pill[aria-pressed=true]{background:var(--agua);color:#00201e;border-color:var(--agua)}
+.lbl{font-size:13px;color:var(--soft);margin-right:2px}
+.busca input{width:100%;min-height:44px;font-size:16px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(8px)}
+.top button{min-height:38px;padding:0 12px;border-radius:10px;border:1px solid rgba(60,230,220,.35);background:rgba(8,30,32,.7);cursor:pointer;font-size:13px;font-weight:600}
+.top b{color:var(--agua)}
+.ficha{position:absolute;right:max(3vw,14px);bottom:max(4vh,14px);width:min(390px,calc(100% - 28px));max-height:72svh;overflow:auto;background:var(--panel);backdrop-filter:blur(12px);
+  border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.ficha h3{font-size:21px}
+.ficha .alc{color:var(--soft);font-size:14px;margin:2px 0 10px}
+.grande{font-size:34px;font-weight:800;color:var(--agua);line-height:1.1;font-variant-numeric:tabular-nums}
+.sub{color:var(--soft);font-size:13px;margin:2px 0 10px}
+.barra{display:flex;height:10px;border-radius:5px;overflow:hidden;background:#1a2133;margin:6px 0 4px}
+.barra i{display:block;height:100%}
+.cifras{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;font-size:14px;margin:10px 0 0}
+.cifras dd{margin:0;text-align:right;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.cifras dt{color:var(--soft)}
+.rivales{margin:12px 0 0;padding:0;list-style:none;font-size:13px}
+.rivales li{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid var(--line)}
+.rivales span:last-child{color:var(--ambar);font-weight:700;white-space:nowrap}
+.aviso{margin-top:12px;font-size:12px;color:var(--soft)}
+.vacia{color:var(--soft);font-size:14px;margin:0}
+.cerrar{position:sticky;top:0;float:right;width:36px;height:36px;border-radius:18px;border:1px solid var(--line);background:#0a0e1c;cursor:pointer;font-size:20px;line-height:1;margin:-6px -8px 0 8px}
+.leyenda{position:absolute;left:max(3vw,14px);bottom:max(4vh,14px);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:13px;color:var(--soft);max-width:280px}
+.leyenda i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.band{padding:clamp(28px,4vw,64px) max(5vw,16px);max-width:1240px;margin:0 auto}
+.band h2{font-size:clamp(26px,3.4vw,36px);margin-bottom:18px}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:28px}
+.cols h3{font-size:17px;margin-bottom:6px}
+.cols p,.cols li{color:var(--soft);font-size:15px;margin:0 0 8px}
+.cols ul{padding-left:18px;margin:0}
+.cta{margin-top:36px;padding:26px;border-radius:16px;background:linear-gradient(120deg,rgba(60,230,220,.18),rgba(255,179,71,.12));border:1px solid var(--line);display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+.cta h3{font-size:24px;flex:1 1 300px}
+.cta p{margin:0;color:var(--soft);flex:1 1 320px}
+footer{display:flex;align-items:center;gap:16px;flex-wrap:wrap;color:var(--soft);font-size:13px;padding-top:28px}
+footer img{height:30px}
+@media(max-width:700px){
+  .cabeza p{display:none}
+  .top{display:none}
+  .ficha{left:12px;right:12px;width:auto;bottom:12px;padding:14px 16px;max-height:48svh}
+  .leyenda{display:none}
+  .pill{padding:0 11px;font-size:13px}
+  .grande{font-size:28px}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<section class="mapa" aria-label="Simulador de lavanderías en la Ciudad de México">
+  <div id="deck"></div>
+  <div class="cabeza">
+    <div class="etq">Simulador · Distrito Geo</div>
+    <h1>¿Dónde abrirías una lavandería?</h1>
+    <p>Toca cualquier punto de la ciudad: estimamos cuánto podría vender ahí una lavandería nueva y a quién le quitaría clientes, con tiempos a pie reales.</p>
+    <div class="fila" role="group" aria-label="Qué mostrar">
+      <button class="pill" data-m="op" aria-pressed="true">Oportunidad</button>
+      <button class="pill" data-m="gasto" aria-pressed="false">Gasto de los hogares</button>
+      <button class="pill" data-m="lav" aria-pressed="false">Lavanderías</button>
+    </div>
+    <div class="fila" role="group" aria-label="Tamaño de la lavandería">
+      <span class="lbl">Tu lavandería:</span>
+      <button class="pill" data-a="1" aria-pressed="true">Chica</button>
+      <button class="pill" data-a="1.63" aria-pressed="false">Mediana</button>
+      <button class="pill" data-a="2.58" aria-pressed="false">Grande</button>
+    </div>
+    <div class="busca">
+      <input id="q" list="colonias" placeholder="Busca tu colonia…" aria-label="Buscar colonia" autocomplete="off">
+      <datalist id="colonias"></datalist>
+    </div>
+    <div class="fila top" aria-label="Zonas destacadas">
+      <button data-h="1339"><b>1</b> Ampliación Granada</button>
+      <button data-h="1562"><b>2</b> Sta. María Nonoalco</button>
+      <button data-h="1726"><b>3</b> Anáhuac I</button>
+    </div>
+  </div>
+  <div class="leyenda" id="leyenda"></div>
+  <aside class="ficha" id="ficha" aria-live="polite"><p class="vacia">Toca un hexágono del mapa para simular una lavandería nueva ahí.</p></aside>
+</section>
+
+<section class="band">
+  <h2>Cómo funciona</h2>
+  <div class="cols">
+    <div>
+      <h3>Cuánto se gasta</h3>
+      <p>La Encuesta de Ingresos y Gastos de los Hogares (ENIGH 2024, INEGI) dice cuánto gasta al mes un hogar de la CDMX en lavandería según su ingreso y si tiene lavadora. Lo aplicamos a cada manzana del Censo 2020: unos $1,400 millones al año en toda la ciudad. Los hogares de mayores ingresos gastan casi 9 veces más que los de menores ingresos.</p>
+    </div>
+    <div>
+      <h3>Quién llega caminando</h3>
+      <p>Usamos las calles del Marco Geoestadístico de INEGI a 4.5 km/h: cuenta lo que se camina de verdad, no un círculo. Cada lavandería atiende hasta 15 minutos a pie.</p>
+    </div>
+    <div>
+      <h3>Modelo de Huff</h3>
+      <p>Cada hogar reparte su gasto entre las lavanderías cercanas: más a la más cercana y a la más grande (por personal, DENUE 05/2026). Al poner una nueva, el modelo calcula cuánto gasto captaría y cuánto le quitaría a cada vecina.</p>
+    </div>
+    <div>
+      <h3>¿Sirve? Lo probamos con el pasado</h3>
+      <p>Con datos de 2021 vimos dónde abrieron las 973 lavanderías nuevas hasta 2026: en las zonas que el modelo marcaba como peores abrieron 2.5 veces menos. No adivina cuáles cierran: eso depende de la renta, el servicio o el dueño.</p>
+    </div>
+  </div>
+  <div class="cols" style="margin-top:24px">
+    <div>
+      <h3>Lo que no entra</h3>
+      <ul>
+        <li>Rentas reales (solo el rango del valor del suelo), precios y calidad del servicio.</li>
+        <li>Recolección a domicilio por aplicación y lavanderías dentro de edificios.</li>
+        <li>Es una estimación del gasto que podría captar, no una ganancia ni una garantía.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="cta">
+    <h3>¿Vas a abrir un negocio? Te hago este análisis.</h3>
+    <p>Lavandería, cafetería, farmacia, gimnasio: estimamos tu demanda en pesos, tu competencia y los mejores puntos para abrir, con datos públicos y modelos de geomarketing. Escríbeme por mensaje directo a Distrito Geo.</p>
+  </div>
+  <footer>
+    <img src="logo.png" alt="Distrito Geo">
+    <span>Fuentes: INEGI (ENIGH 2024, Censo de Población 2020, DENUE 11/2021 y 05/2026, Marco Geoestadístico 2020) · Gobierno de la CDMX (valores unitarios del suelo). Hexágonos de 350 m de lado.</span>
+  </footer>
+</section>
+
+<script src="https://unpkg.com/deck.gl@9.1.14/dist.min.js"></script>
+<script>
+{
+const fmt = n => Math.round(n).toLocaleString('es-MX');
+const pesos = n => '$' + fmt(n);
+const miles = n => '$' + fmt(Math.round(n / 1000) * 1000);
+const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const movil = innerWidth < 700;
+const SUELO = ['', 'Muy bajo', 'Bajo', 'Medio', 'Alto', 'Muy alto'];
+const LEY = {
+  op: '<i style="background:#3ce6dc"></i>Altura = gasto que captaría una lavandería nueva<br><i style="background:#ffb347"></i>Lavanderías que perderían clientes',
+  gasto: '<i style="background:#7aa8ff"></i>Altura = gasto mensual de los hogares en lavandería',
+  lav: '<i style="background:#3ce6dc"></i>Lavanderías (DENUE 05/2026)'
+};
+let modo = 'op', A = 1, sel = null, area = new Set(), afectadas = new Map();
+let H = [], NB = [], EN = [], L = [], alc = [], esc = null, LAM = 2, TMAX = 15, TOPE = 95800, PROM = 32000;
+let vista = {longitude: movil ? -99.15 : -99.2, latitude: movil ? 19.38 : 19.42, zoom: movil ? 9.6 : 10.6, pitch: 48, bearing: -10, maxPitch: 70};
+
+function capas() {
+  const M = deck, maxCap = 400000, maxD = 400000;
+  return [
+    esc && new M.BitmapLayer({id: 'luces', image: 'luces.png', bounds: esc.luces, opacity: .9}),
+    new M.PathLayer({id: 'alc', data: alc, getPath: d => d, getColor: [140,165,230,70], getWidth: 1.2, widthUnits: 'pixels'}),
+    modo !== 'lav' && new M.SolidPolygonLayer({
+      id: 'hex', data: H, extruded: true, pickable: true, autoHighlight: true, highlightColor: [255,255,255,70],
+      getPolygon: h => h.v,
+      getElevation: h => modo === 'op' ? Math.min(h.cap, maxCap) / maxCap * 2600 : Math.min(h.D, maxD) / maxD * 2600,
+      getFillColor: (h, {index}) => {
+        if (index === sel) return [255,255,255,240];
+        if (area.has(index)) return [60,230,220,200];
+        const k = modo === 'op' ? Math.min(h.cap / 250000, 1) : Math.min(h.D / 300000, 1);
+        return modo === 'op' ? [20 + 40*k, 60 + 170*k, 70 + 150*k, 70 + 170*k] : [40 + 82*k, 55 + 113*k, 90 + 165*k, 70 + 170*k];
+      },
+      material: {ambient: .55, diffuse: .6, shininess: 24},
+      updateTriggers: {getElevation: modo, getFillColor: [modo, sel, area.size]},
+      transitions: quieto ? {} : {getElevation: {duration: 700}},
+      onClick: ({index}) => simular(index, false)
+    }),
+    new M.ScatterplotLayer({
+      id: 'lav', data: L, pickable: true, visible: modo === 'lav' || vista.zoom > 12 || afectadas.size > 0,
+      getPosition: d => [d[0], d[1], 40], getRadius: (d, {index}) => afectadas.has(index) ? 70 : 30,
+      radiusMinPixels: 1.6, radiusMaxPixels: 9,
+      getFillColor: (d, {index}) => afectadas.has(index) ? [255,179,71,255] : [60,230,220,200],
+      updateTriggers: {getRadius: afectadas.size + '' + sel, getFillColor: afectadas.size + '' + sel, visible: [modo, afectadas.size]}
+    }),
+    modo === 'lav' && new M.SolidPolygonLayer({id: 'hexsel', data: H, pickable: true, getPolygon: h => h.v, getFillColor: [0,0,0,0], onClick: ({index}) => simular(index, false)})
+  ];
+}
+const mapa = new deck.Deck({
+  parent: document.getElementById('deck'), initialViewState: vista, controller: {touchRotate: true},
+  layers: [], parameters: {clearColor: [5/255, 7/255, 15/255, 1]},
+  onViewStateChange: ({viewState}) => { const z = vista.zoom; vista = viewState; if ((z > 12) !== (viewState.zoom > 12)) pintar(); },
+  getTooltip: ({object, layer}) => object && (layer.id === 'lav'
+    ? {text: object[2], style: {background: '#0a0e1c', color: '#eef2fa', font: '13px Montserrat', borderRadius: '8px'}}
+    : object.col ? {text: object.col + ' · ' + object.alc, style: {background: '#0a0e1c', color: '#eef2fa', font: '13px Montserrat', borderRadius: '8px'}} : null)
+});
+function pintar() { mapa.setProps({layers: capas().filter(Boolean)}); }
+
+function simular(h, volar) {
+  if (h == null || !H[h]) return;
+  sel = h; area = new Set(); afectadas = new Map();
+  const U0 = Math.pow(TMAX, -LAM);
+  let total = 0, deFuera = 0;
+  for (const [i, t] of NB[h]) {
+    area.add(i);
+    const Si = H[i].S, u = A * Math.pow(t, -LAM), Di = H[i].D;
+    if (!Di) continue;
+    const g = Di * u / (Si + u); total += g;
+    deFuera += Di * U0 / Si - Di * U0 / (Si + u);
+    for (const [j, uj] of EN[i] || []) {
+      const p = Di * uj / Si - Di * uj / (Si + u);
+      afectadas.set(j, (afectadas.get(j) || 0) + p);
+    }
+  }
+  const rivales = [...afectadas.entries()].sort((a, b) => b[1] - a[1]);
+  const x = H[h], tope = total > TOPE, esc_ = tope ? TOPE / total : 1;
+  const quita = total - deFuera;
+  const lista = rivales.slice(0, 5).map(([j, p]) =>
+    `<li><span>${L[j][2]}</span><span>−${miles(p * esc_)} (${Math.round(100 * p * esc_ / Math.max(L[j][4], 1))} %)</span></li>`).join('');
+  document.getElementById('ficha').innerHTML = `
+    <button class="cerrar" aria-label="Cerrar ficha" onclick="this.parentNode.innerHTML='<p class=vacia>Toca un hexágono del mapa para simular una lavandería nueva ahí.</p>'">×</button>
+    <h3>${x.col || 'Sin colonia'}</h3>
+    <div class="alc">${x.alc}</div>
+    <div class="grande">${tope ? 'más de ' + miles(TOPE) : miles(total)}<span style="font-size:16px;color:var(--soft);font-weight:600"> al mes</span></div>
+    <div class="sub">gasto en lavandería que captaría una lavandería ${A === 1 ? 'chica' : A < 2 ? 'mediana' : 'grande'} aquí${tope ? ' (sin tope el modelo da ' + miles(total) + ', más de lo que vende hoy una lavandería grande; las pérdidas de abajo ya están ajustadas al tope)' : ''}. La lavandería típica de la CDMX vende ~${miles(esc.mediana)}.</div>
+    <div class="barra" aria-hidden="true"><i style="width:${100 * quita / Math.max(total, 1)}%;background:var(--ambar)"></i><i style="width:${100 * deFuera / Math.max(total, 1)}%;background:var(--agua)"></i></div>
+    <div class="sub"><b style="color:var(--ambar)">${Math.round(100 * quita / Math.max(total, 1))} %</b> se lo quitaría a la competencia · <b style="color:var(--agua)">${Math.round(100 * deFuera / Math.max(total, 1))} %</b> es gasto que hoy no llega a ninguna lavandería cercana</div>
+    <dl class="cifras">
+      <dt>Hogares en este hexágono</dt><dd>${fmt(x.hog)}</dd>
+      <dt>Sin lavadora</dt><dd>${x.sin == null ? 's/d' : x.sin + ' %'}</dd>
+      <dt>Gasto mensual del hexágono</dt><dd>${miles(x.D)}</dd>
+      <dt>Lavanderías a 5 / 15 min a pie</dt><dd>${x.l5} / ${x.l15}</dd>
+      <dt>Valor del suelo</dt><dd>${x.su ? SUELO[x.su] : 's/d'}</dd>
+    </dl>
+    ${lista ? `<ul class="rivales" aria-label="Lavanderías que perderían clientes">${lista}</ul>` : ''}
+    <p class="aviso">Estimación con datos públicos y el modelo de Huff (15 min a pie). No es una garantía de ventas.</p>`;
+  pintar();
+  if (volar) {
+    vista = {...vista, longitude: x.c[0] + (movil ? 0 : .012), latitude: x.c[1] + (movil ? .008 : .004), zoom: 13, pitch: 50,
+             transitionDuration: quieto ? 0 : 1600, transitionInterpolator: new deck.FlyToInterpolator()};
+    mapa.setProps({initialViewState: vista});
+  }
+}
+
+function ponerModo(m) {
+  modo = m;
+  document.querySelectorAll('[data-m]').forEach(b => b.setAttribute('aria-pressed', b.dataset.m === m));
+  document.getElementById('leyenda').innerHTML = LEY[m];
+  pintar();
+}
+document.querySelectorAll('[data-m]').forEach(b => b.addEventListener('click', () => ponerModo(b.dataset.m)));
+document.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => {
+  A = +b.dataset.a;
+  document.querySelectorAll('[data-a]').forEach(c => c.setAttribute('aria-pressed', c === b));
+  if (sel != null) simular(sel, false);
+}));
+let IDX = {};
+document.querySelectorAll('.top button').forEach(b => b.addEventListener('click', () => { ponerModo('op'); simular(IDX[+b.dataset.h], true); }));
+const q = document.getElementById('q');
+q.addEventListener('change', () => {
+  const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const [t0, a0] = q.value.split(' · '); const t = norm(t0 || ''); if (!t) return;
+  let c = H.map((h, i) => [h, i]).filter(([h]) => norm(h.col) === t && (!a0 || h.alc === a0.trim()));
+  if (!c.length) c = H.map((h, i) => [h, i]).filter(([h]) => norm(h.col).includes(t));
+  if (!c.length) { document.getElementById('ficha').innerHTML = '<p class="vacia">No encontré esa colonia. Prueba con otro nombre.</p>'; return; }
+  simular(c.reduce((a, b) => (b[0].hog > a[0].hog ? b : a))[1], true); q.blur();
+});
+
+ponerModo('op');
+Promise.all(['hex.json', 'red.json', 'lav.json', 'alcaldias.json', 'escena.json', 'ids.json'].map(f => fetch(f).then(r => r.json())))
+  .then(([h, r, l, a, e, ids]) => {
+    H = h; alc = a; esc = e; L = l.p; LAM = e.lambda; TMAX = e.tmax; TOPE = e.tope; PROM = e.prom; IDX = ids;
+    NB = H.map(() => []); r.o.forEach((o, k) => NB[o].push([r.d[k], r.t[k]]));
+    EN = H.map(() => []); l.o.forEach((o, k) => EN[l.d[k]].push([o, L[o][3] * Math.pow(l.t[k], -LAM)]));
+    pintar();
+    const vistos = new Set();
+    document.getElementById('colonias').innerHTML = H.filter(x => x.col && !vistos.has(x.col + x.alc) && vistos.add(x.col + x.alc))
+      .sort((x, y) => x.col.localeCompare(y.col, 'es')).map(x => `<option value="${x.col} · ${x.alc}">`).join('');
+  })
+  .catch(() => { document.getElementById('ficha').innerHTML = '<p class="vacia">No se pudieron cargar los datos del simulador.</p>'; });
+}
+</script>
+</body>
+</html>
