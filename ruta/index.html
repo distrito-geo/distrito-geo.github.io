@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ruta con menos denuncias · CDMX · Distrito Geo</title>
+<meta name="description" content="Elige origen y destino en la Ciudad de México y compara la ruta más corta a pie con la que pasa por zonas con menos denuncias de robo, de día o de noche.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;800&display=swap">
+<style>
+/* Simulador de ruta a pie con menos denuncias (serie Distrito Geo): nocturno, acento azul agua; rosa = denuncias. */
+:root{color-scheme:dark;--bg:#05070f;--panel:rgba(10,14,28,.9);--ink:#eef2fa;--soft:#9aa6c2;--line:rgba(160,180,230,.18);
+  --agua:#3ce6dc;--rosa:#ff5a8c;--blanco:#ffffff}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Montserrat,system-ui,sans-serif;overflow-x:clip}
+h1,h2,h3{font-weight:800;line-height:1.08;text-wrap:balance;margin:0}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--agua);outline-offset:2px}
+.mapa{position:relative;height:100svh;min-height:580px;overflow:hidden}
+#deck{position:absolute;inset:0}
+.mapa::before{content:"";position:absolute;inset:0 0 auto 0;height:min(440px,60%);background:linear-gradient(rgba(5,7,15,.95),rgba(5,7,15,.55) 65%,transparent);pointer-events:none;z-index:1}
+.cabeza,.ficha,.leyenda,.cargando{z-index:2}
+.cabeza{position:absolute;left:max(3vw,14px);top:max(3vh,14px);right:max(3vw,14px);pointer-events:none;display:flex;flex-direction:column;gap:9px;max-width:560px}
+.cabeza>*{pointer-events:auto}
+.etq{font-size:12px;font-weight:700;letter-spacing:.14em;color:var(--agua);text-transform:uppercase}
+.cabeza h1{font-size:clamp(26px,4.2vw,42px)}
+.cabeza p{margin:0;color:var(--soft);font-size:15px;max-width:50ch}
+.fila{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pill{min-height:42px;padding:0 15px;border-radius:21px;border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(8px);cursor:pointer;font-weight:700;font-size:14px}
+.pill[aria-pressed=true]{background:var(--agua);color:#00201e;border-color:var(--agua)}
+.pill.sw[aria-pressed=true]{background:#1b2a2f;color:var(--agua);border-color:var(--agua)}
+.busca{display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center}
+.busca label{font-size:13px;color:var(--soft);font-weight:700}
+.busca input{width:100%;min-height:42px;font-size:16px;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(8px)}
+.campo{position:relative}
+.sug{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;margin:0;padding:4px;list-style:none;background:#0a0e1c;border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 16px 40px rgba(0,0,0,.6);max-height:min(50svh,340px);overflow:auto}
+.sug[hidden]{display:none}
+.sug li{padding:8px 10px;border-radius:8px;cursor:pointer;line-height:1.25}
+.sug li[aria-selected=true],.sug li:hover{background:#1b2a2f}
+.sug b{display:block;font-size:15px;font-weight:700}
+.sug span{font-size:12px;color:var(--soft)}
+.sug .nada{cursor:default;color:var(--soft);font-size:13px}
+.sug .nada:hover{background:none}
+.punto{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:-1px;margin-right:6px}
+.ayuda{font-size:13px;color:var(--soft)}
+.ficha{position:absolute;right:max(3vw,14px);bottom:max(4vh,14px);width:min(400px,calc(100% - 28px));max-height:70svh;overflow:auto;background:var(--panel);backdrop-filter:blur(12px);
+  border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.ficha h3{font-size:20px;margin-bottom:8px}
+.ruta{display:grid;grid-template-columns:14px 1fr auto;gap:4px 10px;align-items:baseline;padding:10px 0;border-top:1px solid var(--line)}
+.ruta b{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
+.ruta .sub{grid-column:2/4;color:var(--soft);font-size:13px}
+.linea{width:14px;height:5px;border-radius:3px;align-self:center}
+.grande{color:var(--agua);font-size:30px;font-weight:800;line-height:1.1}
+.aviso{margin-top:10px;font-size:12px;color:var(--soft)}
+.vacia{color:var(--soft);font-size:14px;margin:0}
+.cerrar{position:sticky;top:0;float:right;width:36px;height:36px;border-radius:18px;border:1px solid var(--line);background:#0a0e1c;cursor:pointer;font-size:20px;line-height:1;margin:-6px -8px 0 8px}
+.leyenda{position:absolute;left:max(3vw,14px);bottom:max(4vh,14px);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:13px;color:var(--soft);max-width:300px}
+.grad{height:8px;border-radius:4px;background:linear-gradient(90deg,#1d2a4a,#5a4a8a,#c0407a,#ff5a8c,#ffd0e0);margin:6px 0 2px}
+.cargando{position:absolute;inset:auto 0 45% 0;text-align:center;color:var(--soft);font-size:15px}
+.band{padding:clamp(28px,4vw,64px) max(5vw,16px);max-width:1240px;margin:0 auto}
+.band h2{font-size:clamp(26px,3.4vw,36px);margin-bottom:18px}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:28px}
+.cols h3{font-size:17px;margin-bottom:6px}
+.cols p,.cols li{color:var(--soft);font-size:15px;margin:0 0 8px}
+.cols ul{padding-left:18px;margin:0}
+.cta{margin-top:36px;padding:26px;border-radius:16px;background:linear-gradient(120deg,rgba(60,230,220,.18),rgba(255,90,140,.12));border:1px solid var(--line);display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+.cta h3{font-size:24px;flex:1 1 300px}
+.cta p{margin:0;color:var(--soft);flex:1 1 320px}
+footer{display:flex;align-items:center;gap:16px;flex-wrap:wrap;color:var(--soft);font-size:13px;padding-top:28px}
+footer img{height:30px}
+@media(max-width:700px){
+  .cabeza p{display:none}
+  .ficha{left:12px;right:12px;width:auto;bottom:12px;padding:14px 16px;max-height:46svh}
+  .leyenda{display:none}
+  .pill{padding:0 11px;font-size:13px;min-height:40px}
+  .ruta b{font-size:22px}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<section class="mapa" aria-label="Simulador de ruta a pie con menos denuncias en la Ciudad de México">
+  <div id="deck"></div>
+  <div class="cabeza">
+    <div class="etq">Simulador · Distrito Geo</div>
+    <h1>¿Por dónde camino?</h1>
+    <p>Elige origen y destino. Comparamos la ruta más corta a pie con la que pasa por zonas con menos denuncias de robo a peatones.</p>
+    <div class="fila" role="group" aria-label="Hora">
+      <button class="pill" data-h="dia" aria-pressed="true">☀️ Día</button>
+      <button class="pill" data-h="noche" aria-pressed="false">🌙 Noche</button>
+      <button class="pill" data-p="todas" aria-pressed="true">Todas las personas</button>
+      <button class="pill" data-p="mujeres" aria-pressed="false">Mujeres</button>
+    </div>
+    <div class="fila">
+      <button class="pill sw" id="luz" aria-pressed="false">💡 Preferir calles con luz y banqueta</button>
+    </div>
+    <div class="busca">
+      <label for="o"><span class="punto" style="background:#fff"></span>Desde</label>
+      <div class="campo"><input id="o" placeholder="Calle, esquina o colonia" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="sug_o" aria-autocomplete="list" enterkeyhint="search">
+        <ul class="sug" id="sug_o" role="listbox" hidden></ul></div>
+      <label for="d"><span class="punto" style="background:var(--agua)"></span>Hasta</label>
+      <div class="campo"><input id="d" placeholder="Calle, esquina o colonia" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="sug_d" aria-autocomplete="list" enterkeyhint="search">
+        <ul class="sug" id="sug_d" role="listbox" hidden></ul></div>
+    </div>
+    <div class="fila ayuda"><button class="pill" id="yo">📍 Usar mi ubicación</button><span id="paso">Toca el mapa para marcar de dónde sales.</span></div>
+  </div>
+  <div class="leyenda"><b style="color:var(--ink)">Denuncias de robo a peatones</b><div class="grad"></div><div style="display:flex;justify-content:space-between"><span>pocas</span><span>muchas</span></div>
+    <div style="margin-top:8px"><span class="linea" style="display:inline-block;background:#9aa6c2;vertical-align:middle"></span> más corta · <span class="linea" style="display:inline-block;background:var(--agua);vertical-align:middle"></span> menos denuncias</div></div>
+  <div class="cargando" id="cargando">Cargando las 175 mil calles de la ciudad…</div>
+  <aside class="ficha" id="ficha" aria-live="polite"><p class="vacia">Marca un origen y un destino para comparar las rutas.</p></aside>
+</section>
+
+<section class="band">
+  <h2>Cómo funciona</h2>
+  <div class="cols">
+    <div>
+      <h3>Las calles</h3>
+      <p>Usamos las 175 mil calles del Marco Geoestadístico de INEGI y caminamos a 4.5 km/h. Para cada calle sabemos, por el Censo 2020, si tiene alumbrado y banqueta. El buscador usa los nombres de calle del INEGI; la colonia de cada tramo sale de los negocios del DENUE más cercanos, así que en los límites entre colonias puede variar.</p>
+    </div>
+    <div>
+      <h3>Las denuncias</h3>
+      <p>Robos a peatones (en la calle, de celular, en parques y mercados, al salir del banco o del cajero) denunciados ante la Fiscalía de la CDMX en los 24 meses más recientes que se publicaron con ubicación. De día (6 a 19 h) o de noche. En «Mujeres», los mismos robos con víctima mujer y el acoso sexual.</p>
+    </div>
+    <div>
+      <h3>La ruta</h3>
+      <p>Cada calle «cuesta» su largo, más un extra según cuántas denuncias hay a su alrededor. La ruta con menos denuncias acepta caminar un poco más para pasar por zonas con menos robos.</p>
+    </div>
+    <div>
+      <h3>¿Y el alumbrado?</h3>
+      <p>Lo probamos con los datos: con el mismo nivel de robos de día, las calles con luz, banqueta o comercio tienen <b>más</b> robos denunciados de noche, no menos. Lo más probable es que es por ahí donde camina la gente. Por eso el botón «Preferir calles con luz» es una preferencia tuya, no una regla.</p>
+    </div>
+  </div>
+  <div class="cols" style="margin-top:24px">
+    <div>
+      <h3>Lo que debes saber</h3>
+      <ul>
+        <li>Son denuncias: muchos robos no se denuncian y no sabemos cuánta gente camina por cada calle. Menos denuncias no significa cero riesgo.</li>
+        <li>Ninguna ruta es «segura» al 100 %. Esto es una herramienta para comparar, no una garantía.</li>
+        <li>Los datos más recientes con ubicación llegan a <span id="fin_rob">enero de 2025</span> (robos) y <span id="fin_muj">septiembre de 2024</span> (víctimas mujeres).</li>
+        <li>Tu ubicación, si la usas, solo se usa en tu teléfono: no se envía ni se guarda en ningún lado.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="cta">
+    <h3>¿Tu negocio o tu colonia necesitan un análisis así?</h3>
+    <p>Rutas, seguridad, mercado, competencia: hacemos análisis con datos públicos y mapas a la medida. Escríbeme por mensaje directo a Distrito Geo.</p>
+  </div>
+  <footer>
+    <img src="logo.png" alt="Distrito Geo">
+    <span>Fuentes: INEGI (Marco Geoestadístico 2020, Censo 2020: Características del entorno urbano; DENUE para las colonias del buscador) · Fiscalía General de Justicia de la CDMX (carpetas de investigación y víctimas, datos abiertos).</span>
+  </footer>
+</section>
+
+<script src="https://unpkg.com/deck.gl@9.1.14/dist.min.js"></script>
+<script>
+{
+const movil = innerWidth < 700, quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const V = 75;                      // metros por minuto (4.5 km/h)
+let ALFA = 2.5;                    // extra de costo: una calle en el 10 % con más denuncias cuesta 3.5 veces su largo
+let hora = 'dia', para = 'todas', prefLuz = false;
+let N = 0, E = 0, X, Y, LON, LAT, EU, EV, LARGO, RISK, FLAG, GINI, GVX, GVY, PATH, META;
+let ADJ_I, ADJ_E;                  // adyacencia CSR
+let orig = null, dest = null, rCorta = null, rSegura = null, colores = null;
+
+// --- UTM 14N -> lon/lat (WGS84)
+function utm2ll(E_, N_) {
+  const a = 6378137, f = 1 / 298.257223563, e2 = f * (2 - f), k0 = .9996, ep2 = e2 / (1 - e2);
+  const e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
+  const x = E_ - 500000, m = N_ / k0, mu = m / (a * (1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 ** 3 / 256));
+  const p1 = mu + (3 * e1 / 2 - 27 * e1 ** 3 / 32) * Math.sin(2 * mu) + (21 * e1 * e1 / 16 - 55 * e1 ** 4 / 32) * Math.sin(4 * mu)
+    + (151 * e1 ** 3 / 96) * Math.sin(6 * mu) + (1097 * e1 ** 4 / 512) * Math.sin(8 * mu);
+  const s = Math.sin(p1), c = Math.cos(p1), t = Math.tan(p1);
+  const N1 = a / Math.sqrt(1 - e2 * s * s), T1 = t * t, C1 = ep2 * c * c, R1 = a * (1 - e2) / Math.pow(1 - e2 * s * s, 1.5), D = x / (N1 * k0);
+  const lat = p1 - (N1 * t / R1) * (D * D / 2 - (5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * ep2) * D ** 4 / 24 + (61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * ep2 - 3 * C1 * C1) * D ** 6 / 720);
+  const lon = -99 * Math.PI / 180 + (D - (1 + 2 * T1 + C1) * D ** 3 / 6 + (5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * ep2 + 24 * T1 * T1) * D ** 5 / 120) / c;
+  return [lon * 180 / Math.PI, lat * 180 / Math.PI];
+}
+
+const capaIdx = () => (para === 'mujeres' ? 2 : 0) + (hora === 'noche' ? 1 : 0);
+const dens = r8 => Math.exp(r8 / META.escala) - 1;          // denuncias por km² al año
+
+function costo(k, segura) {
+  const l = LARGO[k] / 10;
+  if (!segura) return l;
+  const c = capaIdx(), p90 = META.p90[META.capas[c]];
+  let w = l * (1 + ALFA * dens(RISK[k * 5 + c]) / p90);
+  if (prefLuz) { if (FLAG[k] & 2) w *= 1.6; if (FLAG[k] & 8) w *= 1.4; }
+  return w;
+}
+
+// --- Dijkstra con montículo binario
+function ruta(s, t, segura) {
+  const dist = new Float64Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1), hecho = new Uint8Array(N);
+  const hn = new Int32Array(N * 2 + 16), hd = new Float64Array(N * 2 + 16); let hs = 0;
+  const push = (n, d) => { let i = hs++; while (i > 0) { const p = (i - 1) >> 1; if (hd[p] <= d) break; hn[i] = hn[p]; hd[i] = hd[p]; i = p; } hn[i] = n; hd[i] = d; };
+  const pop = () => { const n = hn[0], ln = hn[--hs], ld = hd[hs]; let i = 0; while (true) { let c = 2 * i + 1; if (c >= hs) break; if (c + 1 < hs && hd[c + 1] < hd[c]) c++; if (hd[c] >= ld) break; hn[i] = hn[c]; hd[i] = hd[c]; i = c; } hn[i] = ln; hd[i] = ld; return n; };
+  dist[s] = 0; push(s, 0);
+  while (hs) {
+    const n = pop(); if (hecho[n]) continue; hecho[n] = 1; if (n === t) break;
+    for (let j = ADJ_I[n]; j < ADJ_I[n + 1]; j++) {
+      const k = ADJ_E[j], m = EU[k] === n ? EV[k] : EU[k], d = dist[n] + costo(k, segura);
+      if (d < dist[m]) { dist[m] = d; prev[m] = k; push(m, d); }
+    }
+  }
+  if (!isFinite(dist[t])) return null;
+  const aristas = []; let n = t;
+  while (n !== s) { const k = prev[n]; aristas.push([k, n]); n = EU[k] === n ? EV[k] : EU[k]; }
+  aristas.reverse();
+  const path = []; let largo = 0, expo = 0, sinLuz = 0, conDato = 0, atr = 0;
+  const c = capaIdx();
+  for (const [k, fin] of aristas) {
+    const a = GINI[k], b = GINI[k + 1], pts = [];
+    for (let i = a; i < b; i++) pts.push([GVX[i], GVY[i]]);
+    if (EU[k] === fin) pts.reverse();
+    for (const p of pts) path.push(p);
+    const l = LARGO[k] / 10; largo += l; expo += l * dens(RISK[k * 5 + c]); atr += l * dens(RISK[k * 5 + 4]);
+    if (FLAG[k] & 3) { conDato += l; if (FLAG[k] & 2) sinLuz += l; }
+  }
+  return {path, largo, expo, sinLuz: conDato ? sinLuz / conDato : null, atr};
+}
+
+// --- nodo más cercano (rejilla de 250 m)
+let REJ = new Map();
+function cercano(x, y) {
+  const gx = Math.floor(x / 250), gy = Math.floor(y / 250); let mejor = -1, md = Infinity;
+  for (let r = 0; r < 4 && mejor < 0; r++)
+    for (let i = gx - r; i <= gx + r; i++) for (let j = gy - r; j <= gy + r; j++)
+      for (const n of REJ.get(i * 100000 + j) || []) { const d = (X[n] - x) ** 2 + (Y[n] - y) ** 2; if (d < md) { md = d; mejor = n; } }
+  return md < 600 ** 2 ? mejor : -1;
+}
+// lon/lat -> metros locales (aprox. por el nodo más cercano en la rejilla)
+const M_LON = 104900, M_LAT = 110770;   // metros por grado a 19.4° N
+function ll2xy(lon, lat) { return [(lon - LON0) * M_LON + DX0, (lat - LAT0) * M_LAT + DY0]; }
+let LON0, LAT0, DX0, DY0;
+
+function colorCalles() {          // en modo binario, deck.gl pide un color por vértice
+  const c = capaIdx(); colores = new Uint8Array(GINI[E] * 4);
+  const st = [[52, 70, 118], [104, 84, 160], [192, 64, 122], [255, 90, 140], [255, 208, 224]];
+  for (let k = 0; k < E; k++) {
+    const u = Math.min(1, dens(RISK[k * 5 + c]) / (META.p90[META.capas[c]] * 1.6));
+    const q = u * 4, i = Math.min(3, Math.floor(q)), f = q - i;
+    const r = st[i][0] + (st[i + 1][0] - st[i][0]) * f, g = st[i][1] + (st[i + 1][1] - st[i][1]) * f, b = st[i][2] + (st[i + 1][2] - st[i][2]) * f, a = 150 + 105 * Math.sqrt(u);
+    for (let v = GINI[k]; v < GINI[k + 1]; v++) { colores[v * 4] = r; colores[v * 4 + 1] = g; colores[v * 4 + 2] = b; colores[v * 4 + 3] = a; }
+  }
+}
+
+const deckgl = new deck.Deck({
+  parent: document.getElementById('deck'),
+  initialViewState: {longitude: -99.14, latitude: movil ? 19.36 : 19.39, zoom: movil ? 10 : 10.8, pitch: 0, bearing: 0},
+  controller: {dragRotate: false, touchRotate: false}, parameters: {clearColor: [5 / 255, 7 / 255, 15 / 255, 1]},
+  onClick: info => { if (!N) return; const [x, y] = ll2xy(info.coordinate[0], info.coordinate[1]); marcar(cercano(x, y)); },
+  getCursor: () => 'crosshair'
+});
+
+function capas() {
+  const L = [];
+  if (PATH) L.push(new deck.PathLayer({id: 'calles', data: {length: E, startIndices: GINI, attributes: {getPath: {value: PATH, size: 2}, getColor: {value: colores, size: 4, normalized: true}}},
+    _pathType: 'open', positionFormat: 'XY', getWidth: 1, widthUnits: 'pixels', widthMinPixels: .8, updateTriggers: {getColor: [hora, para]}}));
+  if (rCorta) L.push(new deck.PathLayer({id: 'corta', data: [rCorta], getPath: d => d.path, getColor: [154, 166, 194, 230], getWidth: 5, widthUnits: 'pixels', jointRounded: true, capRounded: true, getDashArray: [3, 2]}));
+  if (rSegura) {
+    L.push(new deck.PathLayer({id: 'segura-halo', data: [rSegura], getPath: d => d.path, getColor: [60, 230, 220, 80], getWidth: 14, widthUnits: 'pixels', jointRounded: true, capRounded: true}));
+    L.push(new deck.PathLayer({id: 'segura', data: [rSegura], getPath: d => d.path, getColor: [60, 230, 220, 255], getWidth: 5, widthUnits: 'pixels', jointRounded: true, capRounded: true}));
+  }
+  const pts = [orig != null && {n: orig, c: [255, 255, 255]}, dest != null && {n: dest, c: [60, 230, 220]}].filter(Boolean);
+  L.push(new deck.ScatterplotLayer({id: 'puntos', data: pts, getPosition: d => [LON[d.n], LAT[d.n]], getFillColor: d => d.c, getLineColor: [5, 7, 15], lineWidthMinPixels: 3, stroked: true, radiusMinPixels: 9, radiusMaxPixels: 12}));
+  return L;
+}
+function pintar() { deckgl.setProps({layers: capas()}); }
+
+const fmtMin = m => m < 60 ? Math.round(m) + ' min' : Math.floor(m / 60) + ' h ' + Math.round(m % 60) + ' min';
+function calcular() {
+  rCorta = rSegura = null;
+  if (orig == null || dest == null) { pintar(); return; }
+  const recto = Math.hypot(X[orig] - X[dest], Y[orig] - Y[dest]);
+  rCorta = ruta(orig, dest, false);
+  // la ruta con menos denuncias no debe alargar más de un 30 %: si se pasa, se baja el peso de las denuncias
+  for (const a of [2.5, 1.2, .6, .3]) { ALFA = a; rSegura = ruta(orig, dest, true); if (!rCorta || !rSegura || rSegura.largo <= rCorta.largo * 1.3) break; }
+  pintar();
+  const f = document.getElementById('ficha');
+  if (!rCorta || !rSegura) { f.innerHTML = '<p class="vacia">No encontré un camino a pie entre esos puntos.</p>'; return; }
+  const menos = rCorta.expo > 0 ? Math.round(100 * (1 - rSegura.expo / rCorta.expo)) : 0;
+  const extra = Math.round(rSegura.largo / V) - Math.round(rCorta.largo / V);
+  const igual = menos < 3 || rSegura.largo - rCorta.largo < 30;
+  f.innerHTML = `
+    <button class="cerrar" aria-label="Borrar ruta" id="borrar">×</button>
+    <h3>${hora === 'noche' ? '🌙 De noche' : '☀️ De día'}${para === 'mujeres' ? ' · mujeres' : ''}</h3>
+    ${igual ? '<div class="grande">La ruta corta ya es buena</div><div class="ayuda">No hay un camino cercano con claramente menos denuncias.</div>'
+            : `<div class="grande">${menos} % menos denuncias</div><div class="ayuda">en el camino, ${extra < 1 ? 'casi en el mismo tiempo' : 'a cambio de ' + fmtMin(extra) + ' más a pie'}</div>`}
+    <div class="ruta"><span class="linea" style="background:#9aa6c2"></span><span>Más corta</span><b>${fmtMin(rCorta.largo / V)}</b>
+      <span class="sub">${(rCorta.largo / 1000).toFixed(1)} km${hora === 'noche' && rCorta.sinLuz != null ? ' · ' + Math.round(100 * rCorta.sinLuz) + ' % sin alumbrado' : ''}</span></div>
+    <div class="ruta"><span class="linea" style="background:var(--agua)"></span><span>Menos denuncias</span><b>${fmtMin(rSegura.largo / V)}</b>
+      <span class="sub">${(rSegura.largo / 1000).toFixed(1)} km${hora === 'noche' && rSegura.sinLuz != null ? ' · ' + Math.round(100 * rSegura.sinLuz) + ' % sin alumbrado' : ''}</span></div>
+    ${recto > 6000 ? '<p class="aviso" style="color:var(--rosa)">Es un trayecto largo para caminar: considera el transporte público para una parte.</p>' : ''}
+    <p class="aviso">Comparación con denuncias de robo a peatones (FGJ CDMX). Menos denuncias no significa cero riesgo. Ninguna ruta es segura al 100 %.</p>`;
+  document.getElementById('borrar').onclick = () => { orig = dest = null; calcular(); f.innerHTML = '<p class="vacia">Marca un origen y un destino para comparar las rutas.</p>'; paso(); };
+  if (!quieto) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of rCorta.path.concat(rSegura.path)) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+    const vp = new deck.WebMercatorViewport({width: innerWidth, height: innerHeight});
+    const pad = movil ? {top: 330, bottom: innerHeight * .48, left: 30, right: 30} : {top: 330, bottom: 60, left: 60, right: 460};
+    try { const {longitude, latitude, zoom} = vp.fitBounds([[x0, y0], [x1, y1]], {padding: pad});
+      deckgl.setProps({initialViewState: {longitude, latitude, zoom: Math.min(zoom, 16.5), pitch: 0, bearing: 0, transitionDuration: 900, transitionInterpolator: new deck.FlyToInterpolator()}}); } catch (e) {}
+  }
+}
+function paso() {
+  document.getElementById('paso').textContent = orig == null ? 'Toca el mapa para marcar de dónde sales.' : dest == null ? 'Ahora toca a dónde vas.' : 'Toca otra vez para empezar de nuevo.';
+}
+function marcar(n) {
+  if (n < 0) return;
+  if (orig == null || dest != null) { orig = n; dest = null; rCorta = rSegura = null; }
+  else dest = n;
+  paso(); calcular();
+}
+
+document.querySelectorAll('[data-h]').forEach(b => b.onclick = () => { hora = b.dataset.h; document.querySelectorAll('[data-h]').forEach(c => c.setAttribute('aria-pressed', c === b)); colorCalles(); calcular(); });
+document.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { para = b.dataset.p; document.querySelectorAll('[data-p]').forEach(c => c.setAttribute('aria-pressed', c === b)); colorCalles(); calcular(); });
+document.getElementById('luz').onclick = e => { prefLuz = !prefLuz; e.currentTarget.setAttribute('aria-pressed', prefLuz); calcular(); };
+const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+// ---- buscador: calles (por colonia), esquinas («Durango y Orizaba») y colonias
+let CN, CC, CA, CAL, ENT = [], NOMN = [], EDGES_N, IDX_N, NT;   // por arista: nombre, colonia, alcaldía; entradas (calle+colonia)
+const TIPOS = /^(calle|avenida|av|calzada|calz|cerrada|privada|andador|eje vial|circuito|callejon|peatonal|periferico|prolongacion|prol|carretera|retorno|boulevard|blvd|bulevar|continuacion|diagonal|pasaje|corredor|ampliacion|paseo|camino)\.?\s+/;
+const sinTipo = t => t.replace(TIPOS, '');
+function prepararCalles(cb, cj) {
+  CAL = cj; CN = new Uint16Array(cb.slice(0, E * 2)); CC = new Uint16Array(cb.slice(E * 2, E * 4)); CA = new Uint8Array(cb, E * 4, E);
+  NOMN = cj.nombres.map(x => norm(x).replace(/[().,;"'-]/g, ' ').replace(/\s+/g, ' ').trim());   // «Eje 3 Poniente (Salamanca)» -> se encuentra con «salamanca»
+  // aristas agrupadas por nombre (para las esquinas) y por nombre + colonia (para las calles)
+  const ord = Array.from({length: E}, (_, k) => k).filter(k => CN[k] !== 65535).sort((p, q) => CN[p] - CN[q] || CC[p] - CC[q]);
+  EDGES_N = Uint32Array.from(ord); IDX_N = new Int32Array(cj.nombres.length + 1).fill(-1);
+  for (let i = 0; i < ord.length; i++) {
+    const k = ord[i], n = CN[k];
+    if (IDX_N[n] < 0) IDX_N[n] = i;
+    if (i === 0 || CN[ord[i - 1]] !== n || CC[ord[i - 1]] !== CC[k]) ENT.push({n, c: CC[k], a: CA[k], i0: i, i1: i + 1}); else ENT[ENT.length - 1].i1 = i + 1;
+  }
+  for (let n = cj.nombres.length - 1, sig = ord.length; n >= 0; n--) { if (IDX_N[n] < 0) IDX_N[n] = sig; sig = IDX_N[n]; }
+  IDX_N[cj.nombres.length] = ord.length;
+  NT = new Float64Array(cj.nombres.length); for (let k = 0; k < E; k++) if (CN[k] !== 65535) NT[CN[k]] += LARGO[k];
+  for (const t of ENT) { t.col = t.c === 65535 ? '' : norm(cj.colonias[t.c]); t.m = 0; for (let i = t.i0; i < t.i1; i++) t.m += LARGO[EDGES_N[i]]; }
+}
+// nodo que representa un grupo de aristas: el extremo más cercano al centro del grupo
+function nodoCentral(aristas) {
+  let sx = 0, sy = 0; for (const k of aristas) { sx += X[EU[k]] + X[EV[k]]; sy += Y[EU[k]] + Y[EV[k]]; }
+  sx /= 2 * aristas.length; sy /= 2 * aristas.length; let mejor = -1, md = Infinity;
+  for (const k of aristas) for (const n of [EU[k], EV[k]]) { const d = (X[n] - sx) ** 2 + (Y[n] - sy) ** 2; if (d < md) { md = d; mejor = n; } }
+  return mejor;
+}
+// qué tan bien coincide un nombre con lo que se escribió (menor = mejor; -1 = no coincide)
+function puntaje(nombre, q, toks) {
+  const core = sinTipo(nombre);
+  if (core === q || nombre === q) return 0;
+  if (core.startsWith(q) || (' ' + nombre).includes(' ' + q)) return 1;
+  return toks.every(t => (' ' + nombre).includes(' ' + t)) ? 2 : -1;
+}
+function nombresQue(q) {
+  const toks = q.split(/\s+/).filter(Boolean), out = [];
+  for (let n = 0; n < NOMN.length; n++) { const p = puntaje(NOMN[n], q, toks); if (p >= 0) out.push([p, n]); }
+  return out.sort((x, y) => x[0] - y[0] || NT[y[1]] - NT[x[1]]).slice(0, 40).map(x => x[1]);
+}
+const ESQ = /\s+(?:y|e|esq\.?|esquina(?:\s+con)?|con|&|\/)\s+/;
+function sugerencias(texto) {
+  const q = sinTipo(norm(texto).replace(/[.,#();"'-]/g, ' ').replace(/\s+/g, ' ').trim()); if (q.length < 2 || !CAL) return [];
+  const res = [];
+  // esquinas
+  const partes = q.split(ESQ);
+  if (partes.length === 2 && partes[0].length > 1 && partes[1].length > 1) {
+    const A = nombresQue(sinTipo(partes[0])), B = nombresQue(sinTipo(partes[1]));
+    // las líneas del INEGI no siempre se tocan en la esquina: vale cualquier par de extremos a menos de 25 m
+    const R = 25, rej = new Map(), clave = (x, y) => Math.floor(x / R) * 1e5 + Math.floor(y / R);
+    for (const n of A) for (let i = IDX_N[n]; i < IDX_N[n + 1]; i++) { const k = EDGES_N[i];
+      for (const v of [EU[k], EV[k]]) { const c = clave(X[v], Y[v]); if (!rej.has(c)) rej.set(c, []); rej.get(c).push([v, n, k]); } }
+    const vistos = new Set();
+    for (const n of B) for (let i = IDX_N[n]; i < IDX_N[n + 1]; i++) {
+      const k = EDGES_N[i];
+      for (const v of [EU[k], EV[k]]) {
+        const gx = Math.floor(X[v] / R), gy = Math.floor(Y[v] / R);
+        for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (const [w, na, ka] of rej.get((gx + dx) * 1e5 + gy + dy) || []) {
+          if (na === n || (X[w] - X[v]) ** 2 + (Y[w] - Y[v]) ** 2 > R * R) continue;
+          const c = CC[k] !== 65535 ? CC[k] : CC[ka], id = na + '|' + n + '|' + c; if (vistos.has(id)) continue; vistos.add(id);
+          res.push({p: -1, m: NT[na] + NT[n], nodo: v, t: CAL.nombres[na] + ' y ' + CAL.nombres[n], sub: lugar(c, CA[k])});
+        }
+      }
+    }
+  }
+  // calles: el texto puede traer también la colonia («durango roma»)
+  const toks = q.split(' ');
+  for (let cut = toks.length; cut >= 1 && res.length < 60; cut--) {
+    const qn = toks.slice(0, cut).join(' '), qc = toks.slice(cut).join(' ');
+    const ns = new Set(nombresQue(qn)); if (!ns.size) continue;
+    const pn = new Map(); const tk = qn.split(' ');
+    for (const n of ns) pn.set(n, Math.max(1, puntaje(NOMN[n], qn, tk)));   // igual o «empieza con»: gana la calle más larga
+    for (const t of ENT) if (ns.has(t.n) && (!qc || t.col.includes(qc))) res.push({p: pn.get(t.n), m: NT[t.n], me: t.m, ent: t, t: CAL.nombres[t.n], sub: lugar(t.c, t.a)});
+    if (res.length) break;
+  }
+  // colonias
+  const vc = new Set();
+  for (const x of META.colonias) {
+    const nc = norm(x[0]); if (vc.has(x[0] + x[1])) continue;
+    const p = nc === q || nc.startsWith(q) ? 1 : nc.includes(q) ? 2 : -9;
+    if (p > -9) { vc.add(x[0] + x[1]); res.push({p, m: nc === q ? 6e4 : 2e4, xy: [x[2], x[3]], t: x[0], sub: 'Colonia · ' + x[1]}); }
+  }
+  res.sort((x, y) => x.p - y.p || y.m - x.m || (y.me || 0) - (x.me || 0));
+  const porNombre = new Map(), fin = [];          // máximo 3 colonias por calle: si quieres otra, escribe también la colonia
+  for (const r of res) { const c = porNombre.get(r.t) || 0; if (c < 3) { porNombre.set(r.t, c + 1); fin.push(r); } if (fin.length === 8) break; }
+  return fin;
+}
+const lugar = (c, a) => [c === 65535 ? '' : CAL.colonias[c], CAL.alcaldias[a] || ''].filter(Boolean).join(' · ');
+function elegir(cual, s_) {
+  let n = s_.nodo;
+  if (n == null && s_.ent) { const ar = []; for (let i = s_.ent.i0; i < s_.ent.i1; i++) ar.push(EDGES_N[i]); n = nodoCentral(ar); }
+  if (n == null && s_.xy) n = cercano(s_.xy[0], s_.xy[1]);
+  if (n == null || n < 0) return;
+  const inp = document.getElementById(cual); inp.value = s_.t + (s_.sub ? ' · ' + s_.sub.replace(/^Colonia · /, '') : '');
+  if (cual === 'o') { orig = n; if (dest == null) rCorta = rSegura = null; } else dest = n;
+  if (orig == null || dest == null) deckgl.setProps({initialViewState: {longitude: LON[n], latitude: LAT[n], zoom: 15.5, pitch: 0, bearing: 0, transitionDuration: 800, transitionInterpolator: new deck.FlyToInterpolator()}});
+  paso(); calcular(); cerrarSug(cual); inp.blur();
+}
+const LISTAS = {o: [], d: []}, SEL = {o: 0, d: 0};
+function cerrarSug(cual) { const ul = document.getElementById('sug_' + cual); ul.hidden = true; document.getElementById(cual).setAttribute('aria-expanded', 'false'); }
+function mostrarSug(cual) {
+  const inp = document.getElementById(cual), ul = document.getElementById('sug_' + cual), v = inp.value.trim();
+  if (v.length < 2) { cerrarSug(cual); return; }
+  if (!CAL) { ul.innerHTML = '<li class="nada">Cargando las calles…</li>'; ul.hidden = false; return; }
+  const L = LISTAS[cual] = sugerencias(v); SEL[cual] = 0;
+  const esc = t => t.replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  ul.innerHTML = L.length ? L.map((x, i) => `<li role="option" id="sug_${cual}_${i}" aria-selected="${i === 0}" data-i="${i}"><b>${esc(x.t)}</b><span>${esc(x.sub)}</span></li>`).join('')
+    : '<li class="nada">No encontré esa calle. Prueba solo el nombre, sin número, o «calle y calle».</li>';
+  ul.hidden = false; inp.setAttribute('aria-expanded', 'true');
+}
+for (const cual of ['o', 'd']) {
+  const inp = document.getElementById(cual), ul = document.getElementById('sug_' + cual);
+  let tm; inp.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => mostrarSug(cual), 120); });
+  inp.addEventListener('focus', () => { if (inp.value.trim().length > 1 && LISTAS[cual].length) ul.hidden = false; });
+  inp.addEventListener('blur', () => setTimeout(() => cerrarSug(cual), 150));
+  inp.addEventListener('keydown', e => {
+    const L = LISTAS[cual];
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!L.length) return; e.preventDefault(); SEL[cual] = (SEL[cual] + (e.key === 'ArrowDown' ? 1 : L.length - 1)) % L.length;
+      ul.querySelectorAll('li').forEach((li, i) => li.setAttribute('aria-selected', i === SEL[cual])); inp.setAttribute('aria-activedescendant', 'sug_' + cual + '_' + SEL[cual]);
+    } else if (e.key === 'Enter') { e.preventDefault(); clearTimeout(tm); if (!L.length) mostrarSug(cual); if (LISTAS[cual].length) elegir(cual, LISTAS[cual][SEL[cual]]); }
+    else if (e.key === 'Escape') cerrarSug(cual);
+  });
+  ul.addEventListener('mousedown', e => e.preventDefault());
+  ul.addEventListener('click', e => { const li = e.target.closest('li[data-i]'); if (li) elegir(cual, LISTAS[cual][+li.dataset.i]); });
+}
+document.getElementById('yo').onclick = () => {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(p => {          // solo en tu teléfono: no se envía a ningún servidor
+    const [x, y] = ll2xy(p.coords.longitude, p.coords.latitude); const n = cercano(x, y);
+    if (n < 0) { document.getElementById('paso').textContent = 'Tu ubicación está fuera de la CDMX.'; return; }
+    orig = n; dest = null; paso(); calcular();
+    deckgl.setProps({initialViewState: {longitude: LON[n], latitude: LAT[n], zoom: 15, transitionDuration: 800, transitionInterpolator: new deck.FlyToInterpolator()}});
+  }, () => { document.getElementById('paso').textContent = 'No se pudo obtener tu ubicación.'; }, {enableHighAccuracy: true, timeout: 10000});
+};
+
+Promise.all([fetch('red.bin').then(r => r.arrayBuffer()), fetch('geom.bin').then(r => r.arrayBuffer()), fetch('meta.json').then(r => r.json())])
+  .then(([rb, gb, meta]) => {
+    META = meta;
+    const h = new Uint32Array(rb, 0, 2); N = h[0]; E = h[1]; let o = 8;
+    const nod = new Uint16Array(rb, o, N * 2); o += N * 4;
+    const uv = new Uint32Array(rb.slice(o, o + E * 8)); o += E * 8;
+    LARGO = new Uint16Array(rb.slice(o, o + E * 2)); o += E * 2;
+    RISK = new Uint8Array(rb, o, E * 5); o += E * 5;
+    FLAG = new Uint8Array(rb, o, E);
+    X = new Float64Array(N); Y = new Float64Array(N); LON = new Float64Array(N); LAT = new Float64Array(N);
+    const [OX, OY] = meta.origen;
+    for (let i = 0; i < N; i++) { X[i] = nod[2 * i]; Y[i] = nod[2 * i + 1]; const [lo, la] = utm2ll(OX + X[i], OY + Y[i]); LON[i] = lo; LAT[i] = la; }
+    EU = new Uint32Array(E); EV = new Uint32Array(E);
+    for (let k = 0; k < E; k++) { EU[k] = uv[2 * k]; EV[k] = uv[2 * k + 1]; }
+    const deg = new Uint32Array(N + 1);
+    for (let k = 0; k < E; k++) { deg[EU[k] + 1]++; deg[EV[k] + 1]++; }
+    for (let i = 0; i < N; i++) deg[i + 1] += deg[i];
+    ADJ_I = deg; ADJ_E = new Uint32Array(2 * E); const pos = deg.slice(0, N);
+    for (let k = 0; k < E; k++) { ADJ_E[pos[EU[k]]++] = k; ADJ_E[pos[EV[k]]++] = k; }
+    for (let i = 0; i < N; i++) { const key = Math.floor(X[i] / 250) * 100000 + Math.floor(Y[i] / 250); if (!REJ.has(key)) REJ.set(key, []); REJ.get(key).push(i); }
+    // geometría de las calles
+    const gh = new Uint32Array(gb, 0, 2), nv = gh[1];
+    GINI = new Uint32Array(gb.slice(8, 8 + (E + 1) * 4));
+    const gv = new Uint16Array(gb.slice(8 + (E + 1) * 4));
+    GVX = new Float64Array(nv); GVY = new Float64Array(nv); PATH = new Float32Array(nv * 2);
+    for (let i = 0; i < nv; i++) { const [lo, la] = utm2ll(OX + gv[2 * i], OY + gv[2 * i + 1]); GVX[i] = lo; GVY[i] = la; PATH[2 * i] = lo; PATH[2 * i + 1] = la; }
+    // conversión lon/lat -> metros locales, anclada en el centro de la red
+    const c = Math.floor(N / 2); LON0 = LON[c]; LAT0 = LAT[c]; DX0 = X[c]; DY0 = Y[c];
+    const MES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const mes = s => { const [a, m] = s.split('-'); return MES[+m - 1] + ' de ' + a; };
+    document.getElementById('fin_rob').textContent = mes(meta.periodos.robos[1]);
+    document.getElementById('fin_muj').textContent = mes(meta.periodos.mujeres[1]);
+    colorCalles(); pintar();
+    document.getElementById('cargando').remove();
+    Promise.all([fetch('calles.bin').then(r => r.arrayBuffer()), fetch('calles.json').then(r => r.json())])
+      .then(([cb, cj]) => { prepararCalles(cb, cj); for (const c of ['o', 'd']) if (document.activeElement === document.getElementById(c)) mostrarSug(c); })
+      .catch(() => {});
+  })
+  .catch(() => { document.getElementById('cargando').textContent = 'No se pudieron cargar los datos del simulador.'; });
+}
+</script>
+</body>
+</html>
