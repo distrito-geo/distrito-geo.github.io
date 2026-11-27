@@ -85,6 +85,7 @@ footer img{height:30px}
       <button class="pill" data-m="op" aria-pressed="true">Oportunidad</button>
       <button class="pill" data-m="gasto" aria-pressed="false">Gasto de los hogares</button>
       <button class="pill" data-m="lav" aria-pressed="false">Lavanderías</button>
+      <button class="pill" data-m="ins" aria-pressed="false">Inseguridad</button>
     </div>
     <div class="fila" role="group" aria-label="Tamaño de la lavandería">
       <span class="lbl">Tu lavandería:</span>
@@ -96,11 +97,10 @@ footer img{height:30px}
       <input id="q" list="colonias" placeholder="Busca tu colonia…" aria-label="Buscar colonia" autocomplete="off">
       <datalist id="colonias"></datalist>
     </div>
-    <div class="fila top" aria-label="Zonas destacadas">
-      <button data-h="1339"><b>1</b> Ampliación Granada</button>
-      <button data-h="1562"><b>2</b> Sta. María Nonoalco</button>
-      <button data-h="1726"><b>3</b> Anáhuac I</button>
+    <div class="fila">
+      <button class="pill" id="evitar" aria-pressed="false">Evitar zonas con mucho robo</button>
     </div>
+    <div class="fila top" id="top" aria-label="Zonas destacadas"></div>
   </div>
   <div class="leyenda" id="leyenda"></div>
   <aside class="ficha" id="ficha" aria-live="polite"><p class="vacia">Toca un hexágono del mapa para simular una lavandería nueva ahí.</p></aside>
@@ -125,6 +125,10 @@ footer img{height:30px}
       <h3>¿Sirve? Lo probamos con el pasado</h3>
       <p>Con datos de 2021 vimos dónde abrieron las 973 lavanderías nuevas hasta 2026: en las zonas que el modelo marcaba como peores abrieron 2.5 veces menos. No adivina cuáles cierran: eso depende de la renta, el servicio o el dueño.</p>
     </div>
+    <div>
+      <h3>¿Y la inseguridad?</h3>
+      <p>También la probamos con los robos a negocio y a transeúnte de la FGJ (nov 2020 a oct 2021). Comparando zonas con la misma cantidad de comercio y de gente, donde había más robos no abrieron menos lavanderías ni cerraron más. Por eso no le resta al cálculo, pero la verás en cada ficha y en la capa «Inseguridad». Si prefieres evitarla, el botón «Evitar zonas con mucho robo» deja fuera el 10 % con más robo y te da otro top 3.</p>
+    </div>
   </div>
   <div class="cols" style="margin-top:24px">
     <div>
@@ -142,7 +146,7 @@ footer img{height:30px}
   </div>
   <footer>
     <img src="logo.png" alt="Distrito Geo">
-    <span>Fuentes: INEGI (ENIGH 2024, Censo de Población 2020, DENUE 11/2021 y 05/2026, Marco Geoestadístico 2020) · Gobierno de la CDMX (valores unitarios del suelo). Hexágonos de 350 m de lado.</span>
+    <span>Fuentes: INEGI (ENIGH 2024, Censo de Población 2020, DENUE 11/2021 y 05/2026, Marco Geoestadístico 2020) · Gobierno de la CDMX (valores unitarios del suelo) · FGJ CDMX (carpetas de investigación, lo más reciente publicado con ubicación). Hexágonos de 350 m de lado.</span>
   </footer>
 </section>
 
@@ -154,12 +158,17 @@ const pesos = n => '$' + fmt(n);
 const miles = n => '$' + fmt(Math.round(n / 1000) * 1000);
 const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const movil = innerWidth < 700;
+const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const mes = f => { const d = new Date(f + 'T12:00'); return MESES[d.getMonth()] + ' ' + d.getFullYear(); };
 const SUELO = ['', 'Muy bajo', 'Bajo', 'Medio', 'Alto', 'Muy alto'];
 const LEY = {
   op: '<i style="background:#3ce6dc"></i>Altura = gasto que captaría una lavandería nueva<br><i style="background:#ffb347"></i>Lavanderías que perderían clientes',
   gasto: '<i style="background:#7aa8ff"></i>Altura = gasto mensual de los hogares en lavandería',
-  lav: '<i style="background:#3ce6dc"></i>Lavanderías (DENUE 05/2026)'
+  lav: '<i style="background:#3ce6dc"></i>Lavanderías (DENUE 05/2026)',
+  ins: '<i style="background:#ff5a8c"></i>Altura = riesgo de robo a negocio o a transeúnte, comparado con el resto de la ciudad<br><i style="background:#3a4058"></i>Sin datos suficientes (casi nadie vive o trabaja ahí)'
 };
+const NIVEL = p => p == null ? 's/d' : p >= 90 ? 'Muy alto' : p >= 75 ? 'Alto' : p >= 50 ? 'Medio' : 'Bajo';
+let evitar = false, TOPS = {top: [], top_seguro: []};
 let modo = 'op', A = 1, sel = null, area = new Set(), afectadas = new Map();
 let H = [], NB = [], EN = [], L = [], alc = [], esc = null, LAM = 2, TMAX = 15, TOPE = 95800, PROM = 32000;
 let vista = {longitude: movil ? -99.15 : -99.2, latitude: movil ? 19.38 : 19.42, zoom: movil ? 9.6 : 10.6, pitch: 48, bearing: -10, maxPitch: 70};
@@ -172,15 +181,18 @@ function capas() {
     modo !== 'lav' && new M.SolidPolygonLayer({
       id: 'hex', data: H, extruded: true, pickable: true, autoHighlight: true, highlightColor: [255,255,255,70],
       getPolygon: h => h.v,
-      getElevation: h => modo === 'op' ? Math.min(h.cap, maxCap) / maxCap * 2600 : Math.min(h.D, maxD) / maxD * 2600,
+      getElevation: h => modo === 'ins' ? (h.pr == null ? 0 : Math.pow(h.pr / 100, 3) * 2600)
+        : (evitar && h.pr >= 90 ? 0 : 1) * (modo === 'op' ? Math.min(h.cap, maxCap) / maxCap * 2600 : Math.min(h.D, maxD) / maxD * 2600),
       getFillColor: (h, {index}) => {
         if (index === sel) return [255,255,255,240];
         if (area.has(index)) return [60,230,220,200];
+        if (modo === 'ins') { if (h.pr == null) return [58,64,88,90]; const r = Math.pow(h.pr / 100, 2); return [60 + 195*r, 50 + 40*r, 90 + 50*r, 70 + 170*r]; }
+        if (evitar && h.pr >= 90) return [58,64,88,70];
         const k = modo === 'op' ? Math.min(h.cap / 250000, 1) : Math.min(h.D / 300000, 1);
         return modo === 'op' ? [20 + 40*k, 60 + 170*k, 70 + 150*k, 70 + 170*k] : [40 + 82*k, 55 + 113*k, 90 + 165*k, 70 + 170*k];
       },
       material: {ambient: .55, diffuse: .6, shininess: 24},
-      updateTriggers: {getElevation: modo, getFillColor: [modo, sel, area.size]},
+      updateTriggers: {getElevation: [modo, evitar], getFillColor: [modo, sel, area.size, evitar]},
       transitions: quieto ? {} : {getElevation: {duration: 700}},
       onClick: ({index}) => simular(index, false)
     }),
@@ -240,8 +252,14 @@ function simular(h, volar) {
       <dt>Lavanderías a 5 / 15 min a pie</dt><dd>${x.l5} / ${x.l15}</dd>
       <dt>Valor del suelo</dt><dd>${x.su ? SUELO[x.su] : 's/d'}</dd>
     </dl>
+    <dl class="cifras" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)">
+      <dt>Riesgo de robo</dt><dd style="color:${x.pr >= 75 ? 'var(--rosa)' : 'var(--ink)'}">${NIVEL(x.pr)}</dd>
+      <dt>Robos a negocio al año, alrededor</dt><dd>${fmt(x.nn)}${x.rn != null ? ' · ' + x.rn + ' por 100 negocios' : ''}</dd>
+      <dt>Robos a transeúnte al año, alrededor</dt><dd>${fmt(x.nt)}${x.rt != null ? ' · ' + x.rt + ' por mil personas' : ''}</dd>
+    </dl>
+    ${x.pr >= 90 ? '<p class="aviso" style="color:var(--rosa)">Esta zona está en el 10 % con más robo de la ciudad. En el pasado eso no frenó la apertura de lavanderías, pero tómalo en cuenta para tu local y tus clientes.</p>' : ''}
     ${lista ? `<ul class="rivales" aria-label="Lavanderías que perderían clientes">${lista}</ul>` : ''}
-    <p class="aviso">Estimación con datos públicos y el modelo de Huff (15 min a pie). No es una garantía de ventas.</p>`;
+    <p class="aviso">Estimación con datos públicos y el modelo de Huff (15 min a pie). Robos: carpetas de investigación de la FGJ CDMX, ${esc.delitos ? mes(esc.delitos[0]) + ' a ' + mes(esc.delitos[1]) : ''}, a unos 8 min a pie. No es una garantía de ventas.</p>`;
   pintar();
   if (volar) {
     vista = {...vista, longitude: x.c[0] + (movil ? 0 : .012), latitude: x.c[1] + (movil ? .008 : .004), zoom: 13, pitch: 50,
@@ -263,7 +281,16 @@ document.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', (
   if (sel != null) simular(sel, false);
 }));
 let IDX = {};
-document.querySelectorAll('.top button').forEach(b => b.addEventListener('click', () => { ponerModo('op'); simular(IDX[+b.dataset.h], true); }));
+const CORTO = {'Santa María Nonoalco': 'Sta. María Nonoalco', 'Anáhuac I Sección': 'Anáhuac I'};
+function ponerTop() {
+  const t = evitar ? TOPS.top_seguro : TOPS.top;
+  const el = document.getElementById('top');
+  el.innerHTML = t.map((z, k) => `<button data-h="${z.hid}"><b>${k + 1}</b> ${CORTO[z.col] || z.col}</button>`).join('');
+  el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (modo !== 'op' && modo !== 'gasto') ponerModo('op'); simular(IDX[+b.dataset.h], true); }));
+}
+document.getElementById('evitar').addEventListener('click', e => {
+  evitar = !evitar; e.currentTarget.setAttribute('aria-pressed', evitar); ponerTop(); pintar();
+});
 const q = document.getElementById('q');
 q.addEventListener('change', () => {
   const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -278,6 +305,7 @@ ponerModo('op');
 Promise.all(['hex.json', 'red.json', 'lav.json', 'alcaldias.json', 'escena.json', 'ids.json'].map(f => fetch(f).then(r => r.json())))
   .then(([h, r, l, a, e, ids]) => {
     H = h; alc = a; esc = e; L = l.p; LAM = e.lambda; TMAX = e.tmax; TOPE = e.tope; PROM = e.prom; IDX = ids;
+    TOPS = {top: e.top || [], top_seguro: e.top_seguro || []}; ponerTop();
     NB = H.map(() => []); r.o.forEach((o, k) => NB[o].push([r.d[k], r.t[k]]));
     EN = H.map(() => []); l.o.forEach((o, k) => EN[l.d[k]].push([o, L[o][3] * Math.pow(l.t[k], -LAM)]));
     pintar();
